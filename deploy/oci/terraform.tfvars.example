@@ -1,0 +1,37 @@
+# =============================================================================
+# terraform.tfvars.example — Copia este archivo como terraform.tfvars y
+# completa los valores reales. NO subas terraform.tfvars a git.
+# =============================================================================
+
+# --- OCI Provider ---
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaa<PLACEHOLDER>"
+user_ocid        = "ocid1.user.oc1..aaaaaaaa<PLACEHOLDER>"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-chicago-1"
+
+# --- Compartment ---
+compartment_ocid = "ocid1.compartment.oc1..aaaaaaaa<PLACEHOLDER>"
+
+# --- Networking ---
+# OCID de la subnet donde se desplegará API Gateway y Functions
+subnet_id = "ocid1.subnet.oc1.iad..aaaaaaaa<PLACEHOLDER>"
+
+# --- Functions ---
+function_app_name = "agente-ia-app"
+function_name     = "agente-ia"
+# Imagen Docker en OCIR. Formato: <region>.ocir.io/<namespace>/<repositorio>:<tag>
+function_image    = "us-chicago-1.ocir.io/mytenancy/agente-ia-oci/agente-ia:1.0.0"
+
+# --- API Gateway ---
+api_gateway_name = "agente-ia-gateway"
+
+# --- OCI Generative AI ---
+# OCID del modelo: obtener con:
+#   oci generative-ai model list --compartment-id $COMPARTMENT_ID --all
+genai_model_id = "ocid1.generativeaimodel.oc1.us-chicago-1.<PLACEHOLDER>"
+max_tokens     = 1024
+temperature    = 0.7
+
+# --- Logging ---
+log_level = "INFO"

@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Lint & test the OCI Function (Python)
+  # ---------------------------------------------------------------------------
+  function-ci:
+    name: Function — Lint & Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: function
+        run: |
+          pip install --upgrade pip
+          # Instalar fdk y dependencias sin el SDK de OCI completo
+          pip install fdk requests
+          # Instalar herramientas de lint
+          pip install flake8 pylint
+
+      - name: Lint with flake8
+        working-directory: function
+        run: |
+          flake8 func.py \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503 \
+            --count
+
+      - name: Run unit tests (mock mode)
+        working-directory: function
+        env:
+          MOCK_GENAI: "true"
+          OCI_REGION: "us-chicago-1"
+          COMPARTMENT_ID: "ocid1.compartment.oc1..test"
+          GENAI_MODEL_ID: "ocid1.generativeaimodel.oc1..test"
+        run: |
+          python -c "
+          import sys, os, io, json
+          sys.path.insert(0, '.')
+
+          # Stub minimal FDK for testing without full FDK install
+          import types
+
+          fdk_mod = types.ModuleType('fdk')
+          fdk_response_mod = types.ModuleType('fdk.response')
+
+          class FakeResponse:
+              def __init__(self, ctx, response_data='', headers=None, status_code=200):
+                  self.response_data = response_data
+                  self.headers = headers or {}
+                  self.status_code = status_code
+
+          fdk_response_mod.Response = FakeResponse
+          fdk_mod.response = fdk_response_mod
+          sys.modules['fdk'] = fdk_mod
+          sys.modules['fdk.response'] = fdk_response_mod
+
+          import func
+
+          class FakeCtx:
+              def Headers(self): return {'fn-http-request-url': '/v1/health', 'fn-http-method': 'GET'}
+
+          # Test health endpoint
+          ctx = FakeCtx()
+          resp = func.handler(ctx, io.BytesIO(b''))
+          assert resp.status_code == 200, f'Expected 200, got {resp.status_code}'
+          body = json.loads(resp.response_data)
+          assert body['status'] == 'ok', f'Expected ok, got {body}'
+          print('✅ Health check test passed')
+
+          # Test agent endpoint
+          class FakeCtxAgent:
+              def Headers(self): return {'fn-http-request-url': '/v1/agent', 'fn-http-method': 'POST'}
+
+          ctx2 = FakeCtxAgent()
+          payload = json.dumps({'prompt': 'Hola mundo'}).encode()
+          resp2 = func.handler(ctx2, io.BytesIO(payload))
+          assert resp2.status_code == 200, f'Expected 200, got {resp2.status_code}'
+          body2 = json.loads(resp2.response_data)
+          assert 'response' in body2, f'Expected response key, got {body2}'
+          print('✅ Agent endpoint test passed')
+
+          # Test missing prompt
+          resp3 = func.handler(ctx2, io.BytesIO(b'{}'))
+          assert resp3.status_code == 400, f'Expected 400, got {resp3.status_code}'
+          print('✅ Missing prompt validation test passed')
+
+          print('All tests passed!')
+          "
+
+  # ---------------------------------------------------------------------------
+  # Terraform fmt + validate
+  # ---------------------------------------------------------------------------
+  terraform-ci:
+    name: Terraform — fmt & validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Format Check
+        working-directory: deploy/oci
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init (local validation only)
+        working-directory: deploy/oci
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        working-directory: deploy/oci
+        run: terraform validate

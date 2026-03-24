@@ -1,0 +1,8 @@
+# OCI SDK (solo necesario cuando corre en OCI; en CI se usa MOCK_GENAI=true)
+oci>=2.126.0
+
+# FDK — Oracle Functions Development Kit
+fdk>=0.1.65
+
+# Utilidades
+requests>=2.31.0
