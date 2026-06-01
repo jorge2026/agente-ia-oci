@@ -9,6 +9,7 @@ import logging
 import os
 import sys
 from functools import lru_cache
+from typing import Any, Optional
 
 import fdk.response
 
@@ -63,7 +64,7 @@ def _read_float_env(name: str, default: float) -> float:
 
 
 @lru_cache(maxsize=1)
-def _load_validation_limits() -> dict[str, float | int]:
+def _load_validation_limits() -> dict[str, Any]:
     max_prompt_chars = _read_int_env("MAX_PROMPT_CHARS", DEFAULT_MAX_PROMPT_CHARS)
     max_tokens_limit = _read_int_env("MAX_TOKENS_LIMIT", DEFAULT_MAX_TOKENS_LIMIT)
     min_temperature = _read_float_env("MIN_TEMPERATURE", DEFAULT_MIN_TEMPERATURE)
@@ -96,7 +97,7 @@ def _load_validation_limits() -> dict[str, float | int]:
     }
 
 
-def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
+def _validate_payload(payload: dict) -> tuple[Optional[dict], list[str]]:
     if not isinstance(payload, dict):
         return None, ["El cuerpo debe ser un objeto JSON."]
 
@@ -141,7 +142,7 @@ def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
     session_id = payload.get("session_id")
     if session_id is None:
         session_id = ""
-    if not isinstance(session_id, str):
+    elif not isinstance(session_id, str):
         errors.append("session_id debe ser texto.")
 
     if errors:
