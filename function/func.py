@@ -30,6 +30,8 @@ DEFAULT_MAX_PROMPT_CHARS = 5000
 DEFAULT_MAX_TOKENS_LIMIT = 4096
 DEFAULT_MIN_TEMPERATURE = 0.0
 DEFAULT_MAX_TEMPERATURE = 2.0
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_MAX_TOKENS = 1024
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,7 @@ def _json_response(ctx, status: int, body: dict):
 # Validación de payload
 # ---------------------------------------------------------------------------
 def _read_int_env(name: str, default: int) -> int:
+    """Lee una variable de entorno entera y valida su formato."""
     raw_value = os.environ.get(name, str(default))
     try:
         return int(raw_value)
@@ -56,6 +59,7 @@ def _read_int_env(name: str, default: int) -> int:
 
 
 def _read_float_env(name: str, default: float) -> float:
+    """Lee una variable de entorno decimal y valida su formato."""
     raw_value = os.environ.get(name, str(default))
     try:
         return float(raw_value)
@@ -69,8 +73,8 @@ def _load_validation_limits() -> dict[str, Any]:
     max_tokens_limit = _read_int_env("MAX_TOKENS_LIMIT", DEFAULT_MAX_TOKENS_LIMIT)
     min_temperature = _read_float_env("MIN_TEMPERATURE", DEFAULT_MIN_TEMPERATURE)
     max_temperature = _read_float_env("MAX_TEMPERATURE", DEFAULT_MAX_TEMPERATURE)
-    default_temperature = _read_float_env("TEMPERATURE", 0.7)
-    default_max_tokens = _read_int_env("MAX_TOKENS", 1024)
+    default_temperature = _read_float_env("TEMPERATURE", DEFAULT_TEMPERATURE)
+    default_max_tokens = _read_int_env("MAX_TOKENS", DEFAULT_MAX_TOKENS)
 
     if max_prompt_chars < 1:
         raise ValueError(f"MAX_PROMPT_CHARS={max_prompt_chars} debe ser >= 1.")
@@ -98,6 +102,7 @@ def _load_validation_limits() -> dict[str, Any]:
 
 
 def _validate_payload(payload: dict) -> tuple[Optional[dict], list[str]]:
+    """Valida el payload del agente y devuelve (datos, errores)."""
     if not isinstance(payload, dict):
         return None, ["El cuerpo debe ser un objeto JSON."]
 
