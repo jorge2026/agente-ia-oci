@@ -47,30 +47,66 @@ def _json_response(ctx, status: int, body: dict):
 # Validación de payload
 # ---------------------------------------------------------------------------
 @lru_cache(maxsize=1)
-def _load_validation_limits() -> tuple[int, int, float, float]:
+def _read_int_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name, str(default))
     try:
-        max_prompt_chars = int(os.environ.get("MAX_PROMPT_CHARS", str(DEFAULT_MAX_PROMPT_CHARS)))
-        max_tokens_limit = int(os.environ.get("MAX_TOKENS_LIMIT", str(DEFAULT_MAX_TOKENS_LIMIT)))
-        min_temperature = float(os.environ.get("MIN_TEMPERATURE", str(DEFAULT_MIN_TEMPERATURE)))
-        max_temperature = float(os.environ.get("MAX_TEMPERATURE", str(DEFAULT_MAX_TEMPERATURE)))
+        return int(raw_value)
     except ValueError as exc:
-        raise ValueError("Variables de entorno inválidas para límites de validación.") from exc
+        raise ValueError(f"Variable de entorno inválida: {name}={raw_value}") from exc
+
+
+def _read_float_env(name: str, default: float) -> float:
+    raw_value = os.environ.get(name, str(default))
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Variable de entorno inválida: {name}={raw_value}") from exc
+
+
+def _load_validation_limits() -> dict[str, float | int]:
+    max_prompt_chars = _read_int_env("MAX_PROMPT_CHARS", DEFAULT_MAX_PROMPT_CHARS)
+    max_tokens_limit = _read_int_env("MAX_TOKENS_LIMIT", DEFAULT_MAX_TOKENS_LIMIT)
+    min_temperature = _read_float_env("MIN_TEMPERATURE", DEFAULT_MIN_TEMPERATURE)
+    max_temperature = _read_float_env("MAX_TEMPERATURE", DEFAULT_MAX_TEMPERATURE)
+    default_temperature = _read_float_env("TEMPERATURE", 0.7)
+    default_max_tokens = _read_int_env("MAX_TOKENS", 1024)
 
     if max_prompt_chars < 1:
-        raise ValueError("MAX_PROMPT_CHARS debe ser >= 1.")
+        raise ValueError(f"MAX_PROMPT_CHARS={max_prompt_chars} debe ser >= 1.")
     if max_tokens_limit < 1:
-        raise ValueError("MAX_TOKENS_LIMIT debe ser >= 1.")
+        raise ValueError(f"MAX_TOKENS_LIMIT={max_tokens_limit} debe ser >= 1.")
     if min_temperature > max_temperature:
         raise ValueError("MIN_TEMPERATURE no puede ser mayor que MAX_TEMPERATURE.")
+    if not min_temperature <= default_temperature <= max_temperature:
+        raise ValueError(
+            f"TEMPERATURE={default_temperature} fuera del rango permitido ({min_temperature}-{max_temperature})."
+        )
+    if default_max_tokens < 1 or default_max_tokens > max_tokens_limit:
+        raise ValueError(
+            f"MAX_TOKENS={default_max_tokens} fuera del rango permitido (1-{max_tokens_limit})."
+        )
 
-    return max_prompt_chars, max_tokens_limit, min_temperature, max_temperature
+    return {
+        "max_prompt_chars": max_prompt_chars,
+        "max_tokens_limit": max_tokens_limit,
+        "min_temperature": min_temperature,
+        "max_temperature": max_temperature,
+        "default_temperature": default_temperature,
+        "default_max_tokens": default_max_tokens,
+    }
 
 
 def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
     if not isinstance(payload, dict):
         return None, ["El cuerpo debe ser un objeto JSON."]
 
-    max_prompt_chars, max_tokens_limit, min_temperature, max_temperature = _load_validation_limits()
+    limits = _load_validation_limits()
+    max_prompt_chars = limits["max_prompt_chars"]
+    max_tokens_limit = limits["max_tokens_limit"]
+    min_temperature = limits["min_temperature"]
+    max_temperature = limits["max_temperature"]
+    default_temperature = limits["default_temperature"]
+    default_max_tokens = limits["default_max_tokens"]
     errors = []
 
     prompt_value = payload.get("prompt")
@@ -83,7 +119,7 @@ def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
             errors.append(f"El campo 'prompt' supera el máximo de {max_prompt_chars} caracteres.")
 
     temperature = None
-    temperature_value = payload.get("temperature", os.environ.get("TEMPERATURE", "0.7"))
+    temperature_value = payload.get("temperature", default_temperature)
     try:
         temperature = float(temperature_value)
     except (TypeError, ValueError):
@@ -93,7 +129,7 @@ def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
             errors.append(f"temperature debe estar entre {min_temperature} y {max_temperature}.")
 
     max_tokens = None
-    max_tokens_value = payload.get("max_tokens", os.environ.get("MAX_TOKENS", "1024"))
+    max_tokens_value = payload.get("max_tokens", default_max_tokens)
     try:
         max_tokens = int(max_tokens_value)
     except (TypeError, ValueError):
