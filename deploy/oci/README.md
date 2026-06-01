@@ -2,7 +2,7 @@
 
 Este directorio contiene la infraestructura como código (Terraform) para desplegar el **Agente de IA** en OCI.
 
-## Recursos creados
+## Recursos creados 
 
 | Recurso | Tipo | Descripción |
 |---|---|---|
