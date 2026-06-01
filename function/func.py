@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from functools import lru_cache
-from typing import Optional, TypedDict
+from typing import List, Optional, Tuple, TypedDict
 
 import fdk.response
 
@@ -67,7 +67,6 @@ def _read_float_env(name: str, default: float) -> float:
         raise ValueError(f"Variable de entorno inválida: {name}={raw_value}") from exc
 
 
-@lru_cache(maxsize=1)
 class _ValidationLimits(TypedDict):
     max_prompt_chars: int
     max_tokens_limit: int
@@ -77,6 +76,7 @@ class _ValidationLimits(TypedDict):
     default_max_tokens: int
 
 
+@lru_cache(maxsize=1)
 def _load_validation_limits() -> _ValidationLimits:
     max_prompt_chars = _read_int_env("MAX_PROMPT_CHARS", DEFAULT_MAX_PROMPT_CHARS)
     max_tokens_limit = _read_int_env("MAX_TOKENS_LIMIT", DEFAULT_MAX_TOKENS_LIMIT)
@@ -110,7 +110,7 @@ def _load_validation_limits() -> _ValidationLimits:
     }
 
 
-def _validate_payload(payload: dict) -> tuple[Optional[dict], list[str]]:
+def _validate_payload(payload: dict) -> Tuple[Optional[dict], List[str]]:
     """Valida el payload del agente y devuelve (datos, errores)."""
     if not isinstance(payload, dict):
         return None, ["El cuerpo debe ser un objeto JSON."]
