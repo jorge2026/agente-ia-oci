@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+from functools import lru_cache
 
 import fdk.response
 
@@ -45,6 +46,7 @@ def _json_response(ctx, status: int, body: dict):
 # ---------------------------------------------------------------------------
 # Validación de payload
 # ---------------------------------------------------------------------------
+@lru_cache(maxsize=1)
 def _load_validation_limits() -> tuple[int, int, float, float]:
     try:
         max_prompt_chars = int(os.environ.get("MAX_PROMPT_CHARS", str(DEFAULT_MAX_PROMPT_CHARS)))
@@ -100,7 +102,7 @@ def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
         if max_tokens < 1 or max_tokens > max_tokens_limit:
             errors.append(f"max_tokens debe estar entre 1 y {max_tokens_limit}.")
 
-    session_id = payload.get("session_id", "")
+    session_id = payload.get("session_id")
     if session_id is None:
         session_id = ""
     if not isinstance(session_id, str):
