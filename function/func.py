@@ -46,7 +46,6 @@ def _json_response(ctx, status: int, body: dict):
 # ---------------------------------------------------------------------------
 # Validación de payload
 # ---------------------------------------------------------------------------
-@lru_cache(maxsize=1)
 def _read_int_env(name: str, default: int) -> int:
     raw_value = os.environ.get(name, str(default))
     try:
@@ -63,6 +62,7 @@ def _read_float_env(name: str, default: float) -> float:
         raise ValueError(f"Variable de entorno inválida: {name}={raw_value}") from exc
 
 
+@lru_cache(maxsize=1)
 def _load_validation_limits() -> dict[str, float | int]:
     max_prompt_chars = _read_int_env("MAX_PROMPT_CHARS", DEFAULT_MAX_PROMPT_CHARS)
     max_tokens_limit = _read_int_env("MAX_TOKENS_LIMIT", DEFAULT_MAX_TOKENS_LIMIT)
