@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 SERVICE_NAME = "agente-ia-oci"
 VERSION = "1.0.0"
+DEFAULT_MAX_PROMPT_CHARS = 5000
+DEFAULT_MAX_TOKENS_LIMIT = 4096
+DEFAULT_MIN_TEMPERATURE = 0.0
+DEFAULT_MAX_TEMPERATURE = 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -36,6 +40,81 @@ def _json_response(ctx, status: int, body: dict):
         headers={"Content-Type": "application/json"},
         status_code=status,
     )
+
+
+# ---------------------------------------------------------------------------
+# Validación de payload
+# ---------------------------------------------------------------------------
+def _load_validation_limits() -> tuple[int, int, float, float]:
+    try:
+        max_prompt_chars = int(os.environ.get("MAX_PROMPT_CHARS", str(DEFAULT_MAX_PROMPT_CHARS)))
+        max_tokens_limit = int(os.environ.get("MAX_TOKENS_LIMIT", str(DEFAULT_MAX_TOKENS_LIMIT)))
+        min_temperature = float(os.environ.get("MIN_TEMPERATURE", str(DEFAULT_MIN_TEMPERATURE)))
+        max_temperature = float(os.environ.get("MAX_TEMPERATURE", str(DEFAULT_MAX_TEMPERATURE)))
+    except ValueError as exc:
+        raise ValueError("Variables de entorno inválidas para límites de validación.") from exc
+
+    if max_prompt_chars < 1:
+        raise ValueError("MAX_PROMPT_CHARS debe ser >= 1.")
+    if max_tokens_limit < 1:
+        raise ValueError("MAX_TOKENS_LIMIT debe ser >= 1.")
+    if min_temperature > max_temperature:
+        raise ValueError("MIN_TEMPERATURE no puede ser mayor que MAX_TEMPERATURE.")
+
+    return max_prompt_chars, max_tokens_limit, min_temperature, max_temperature
+
+
+def _validate_payload(payload: dict) -> tuple[dict | None, list[str]]:
+    if not isinstance(payload, dict):
+        return None, ["El cuerpo debe ser un objeto JSON."]
+
+    max_prompt_chars, max_tokens_limit, min_temperature, max_temperature = _load_validation_limits()
+    errors = []
+
+    prompt_value = payload.get("prompt")
+    if not isinstance(prompt_value, str) or not prompt_value.strip():
+        errors.append("El campo 'prompt' es requerido y debe ser texto.")
+        prompt = ""
+    else:
+        prompt = prompt_value.strip()
+        if len(prompt) > max_prompt_chars:
+            errors.append(f"El campo 'prompt' supera el máximo de {max_prompt_chars} caracteres.")
+
+    temperature = None
+    temperature_value = payload.get("temperature", os.environ.get("TEMPERATURE", "0.7"))
+    try:
+        temperature = float(temperature_value)
+    except (TypeError, ValueError):
+        errors.append("temperature debe ser numérico.")
+    else:
+        if not min_temperature <= temperature <= max_temperature:
+            errors.append(f"temperature debe estar entre {min_temperature} y {max_temperature}.")
+
+    max_tokens = None
+    max_tokens_value = payload.get("max_tokens", os.environ.get("MAX_TOKENS", "1024"))
+    try:
+        max_tokens = int(max_tokens_value)
+    except (TypeError, ValueError):
+        errors.append("max_tokens debe ser un entero.")
+    else:
+        if max_tokens < 1 or max_tokens > max_tokens_limit:
+            errors.append(f"max_tokens debe estar entre 1 y {max_tokens_limit}.")
+
+    session_id = payload.get("session_id", "")
+    if session_id is None:
+        session_id = ""
+    if not isinstance(session_id, str):
+        errors.append("session_id debe ser texto.")
+
+    if errors:
+        return None, errors
+
+    return {
+        "prompt": prompt,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "session_id": session_id,
+    }, []
 
 
 # ---------------------------------------------------------------------------
@@ -115,13 +194,18 @@ def _handle_agent(ctx, body: bytes) -> fdk.response.Response:
     except json.JSONDecodeError as exc:
         return _json_response(ctx, 400, {"error": f"JSON inválido: {exc}"})
 
-    prompt = payload.get("prompt", "").strip()
-    if not prompt:
-        return _json_response(ctx, 400, {"error": "El campo 'prompt' es requerido."})
+    try:
+        validated, errors = _validate_payload(payload)
+    except ValueError as exc:
+        return _json_response(ctx, 500, {"error": str(exc)})
 
-    temperature = float(payload.get("temperature", os.environ.get("TEMPERATURE", "0.7")))
-    max_tokens = int(payload.get("max_tokens", os.environ.get("MAX_TOKENS", "1024")))
-    session_id = payload.get("session_id", "")
+    if errors:
+        return _json_response(ctx, 400, {"error": "Validación fallida.", "details": errors})
+
+    prompt = validated["prompt"]
+    temperature = validated["temperature"]
+    max_tokens = validated["max_tokens"]
+    session_id = validated["session_id"]
 
     logger.info(
         "Invocando agente: session_id=%s, temperature=%s, max_tokens=%s",
