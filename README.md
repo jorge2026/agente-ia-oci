@@ -150,6 +150,10 @@ curl -s -X POST "$ENDPOINT/agent" \
 | `GENAI_ENDPOINT` | ❌ | Endpoint personalizado (override) | `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com` |
 | `MAX_TOKENS` | ❌ | Máx. tokens en la respuesta | `1024` |
 | `TEMPERATURE` | ❌ | Temperatura por defecto | `0.7` |
+| `MAX_PROMPT_CHARS` | ❌ | Máx. caracteres permitidos en `prompt` | `5000` |
+| `MAX_TOKENS_LIMIT` | ❌ | Límite superior de `max_tokens` | `4096` |
+| `MIN_TEMPERATURE` | ❌ | Límite inferior de `temperature` | `0.0` |
+| `MAX_TEMPERATURE` | ❌ | Límite superior de `temperature` | `2.0` |
 | `LOG_LEVEL` | ❌ | Nivel de log | `INFO` |
 | `MOCK_GENAI` | ❌ | Activa mock local (tests) | `false` |
 
