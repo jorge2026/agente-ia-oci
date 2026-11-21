@@ -100,6 +100,19 @@ jobs:
           assert resp3.status_code == 400, f'Expected 400, got {resp3.status_code}'
           print('✅ Missing prompt validation test passed')
 
+          # Regression checks for numeric edge cases and correlation metadata.
+          invalid_payloads = [
+              {'prompt': 'test', 'temperature': float('nan')},
+              {'prompt': 'test', 'temperature': float('inf')},
+              {'prompt': 'test', 'max_tokens': 1.5},
+              {'prompt': 'test', 'max_tokens': True},
+              {'prompt': 'test', 'session_id': 'x' * 129},
+          ]
+          for invalid in invalid_payloads:
+              validated, errors = func._validate_payload(invalid)
+              assert validated is None and errors, f'Expected validation failure for {invalid}'
+          print('Input validation edge-case tests passed')
+
           print('All tests passed!')
           "
 
