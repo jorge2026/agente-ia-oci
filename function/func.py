@@ -6,6 +6,7 @@ Recibe peticiones JSON con 'prompt' y llama a OCI Generative AI.
 import io
 import json
 import logging
+import math
 import os
 import sys
 from functools import lru_cache
@@ -32,6 +33,7 @@ DEFAULT_MIN_TEMPERATURE = 0.0
 DEFAULT_MAX_TEMPERATURE = 2.0
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 1024
+MAX_SESSION_ID_CHARS = 128
 
 
 # ---------------------------------------------------------------------------
@@ -136,29 +138,37 @@ def _validate_payload(payload: dict) -> Tuple[Optional[dict], List[str]]:
     temperature = None
     temperature_value = payload.get("temperature", default_temperature)
     try:
+        if isinstance(temperature_value, bool):
+            raise TypeError
         temperature = float(temperature_value)
     except (TypeError, ValueError):
-        errors.append("temperature debe ser numérico.")
+        errors.append("temperature must be a finite number.")
     else:
-        if not min_temperature <= temperature <= max_temperature:
-            errors.append(f"temperature debe estar entre {min_temperature} y {max_temperature}.")
+        if not math.isfinite(temperature) or not min_temperature <= temperature <= max_temperature:
+            errors.append(f"temperature must be finite and between {min_temperature} and {max_temperature}.")
 
     max_tokens = None
     max_tokens_value = payload.get("max_tokens", default_max_tokens)
     try:
+        if isinstance(max_tokens_value, bool):
+            raise TypeError
+        if isinstance(max_tokens_value, float) and not max_tokens_value.is_integer():
+            raise ValueError
         max_tokens = int(max_tokens_value)
     except (TypeError, ValueError):
-        errors.append("max_tokens debe ser un entero.")
+        errors.append("max_tokens must be an integer.")
     else:
         if max_tokens < 1 or max_tokens > max_tokens_limit:
-            errors.append(f"max_tokens debe estar entre 1 y {max_tokens_limit}.")
+            errors.append(f"max_tokens must be between 1 and {max_tokens_limit}.")
 
     session_id = payload.get("session_id")
     if session_id is None:
         session_id = ""
     elif not isinstance(session_id, str):
-        errors.append("session_id debe ser texto.")
+        errors.append("session_id must be a string.")
         session_id = ""
+    elif len(session_id) > MAX_SESSION_ID_CHARS:
+        errors.append(f"session_id must not exceed {MAX_SESSION_ID_CHARS} characters.")
 
     if errors:
         return None, errors
@@ -225,7 +235,8 @@ def _call_genai(prompt: str, temperature: float, max_tokens: int) -> str:
         logger.error("Variable de entorno faltante: %s", exc)
         raise ValueError(f"Variable de entorno requerida no configurada: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
-        logger.error("Error al llamar a OCI GenAI: %s", exc)
+        # Avoid writing provider response bodies or request details to application logs.
+        logger.error("OCI Generative AI request failed (%s)", type(exc).__name__)
         raise
 
 
@@ -251,7 +262,8 @@ def _handle_agent(ctx, body: bytes) -> fdk.response.Response:
     try:
         validated, errors = _validate_payload(payload)
     except ValueError as exc:
-        return _json_response(ctx, 500, {"error": str(exc)})
+        logger.error("Agent configuration validation failed (%s)", type(exc).__name__)
+        return _json_response(ctx, 500, {"error": "Server configuration error."})
 
     if errors:
         return _json_response(ctx, 400, {"error": "Validación fallida.", "details": errors})
@@ -271,9 +283,11 @@ def _handle_agent(ctx, body: bytes) -> fdk.response.Response:
     try:
         result = _call_genai(prompt, temperature, max_tokens)
     except ValueError as exc:
-        return _json_response(ctx, 500, {"error": str(exc)})
+        logger.error("Agent configuration error (%s)", type(exc).__name__)
+        return _json_response(ctx, 500, {"error": "Server configuration error."})
     except Exception as exc:  # noqa: BLE001
-        return _json_response(ctx, 502, {"error": f"Error al invocar el modelo: {exc}"})
+        logger.error("Model invocation failed (%s)", type(exc).__name__)
+        return _json_response(ctx, 502, {"error": "The AI provider could not complete the request."})
 
     response_body = {
         "response": result,
